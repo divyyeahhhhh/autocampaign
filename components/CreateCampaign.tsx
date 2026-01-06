@@ -14,7 +14,8 @@ import {
   Edit2,
   Brain,
   Activity,
-  CheckCircle
+  CheckCircle,
+  Check
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -45,7 +46,7 @@ interface GeneratedMessage {
 const CreateCampaign: React.FC<CreateCampaignProps> = ({ onBack, isDemoMode = false, demoStep, setDemoStep }) => {
   const [tone, setTone] = useState('Professional');
   const [prompt, setPrompt] = useState('');
-  const [uploadedFile, setUploadedFile] = useState<{ name: string; rowCount: number; data: CustomerData[] } | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<{ name: string; rowCount: number; data: CustomerData[]; columns: string[] } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationResults, setGenerationResults] = useState<GeneratedMessage[]>([]);
   const [currentStep, setCurrentStep] = useState<'config' | 'results'>('config');
@@ -57,17 +58,24 @@ const CreateCampaign: React.FC<CreateCampaignProps> = ({ onBack, isDemoMode = fa
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const REQUIRED_COLUMNS = ['customerId', 'name', 'phone', 'email', 'age', 'city', 'country', 'occupation'];
+
   // Demo Automation Logic
   useEffect(() => {
     if (!isDemoMode) return;
 
     if (demoStep === DemoStep.AUTO_UPLOAD) {
       const sampleData = [
-        { customerId: 'CUST001', name: 'Rajesh Kumar', phone: '+919876543210', email: 'rajesh.kumar@example.com', age: 35, city: 'Mumbai', country: 'India', occupation: 'Software Engineer', income: 75000, creditScore: 720 },
-        { customerId: 'CUST002', name: 'Priya Sharma', phone: '+919876543211', email: 'priya.sharma@example.com', age: 28, city: 'Delhi', country: 'India', occupation: 'Marketing Manager', income: 90000, creditScore: 780 },
-        { customerId: 'CUST003', name: 'Amit Patel', phone: '+919876543212', email: 'amit.patel@example.com', age: 42, city: 'Bangalore', country: 'India', occupation: 'Business Owner', income: 120000, creditScore: 650 }
+        { customerId: 'CUST001', name: 'Rajesh Kumar', phone: '919876543210', email: 'rajesh.kumar@example.com', age: 35, city: 'Mumbai', country: 'India', occupation: 'Software Engineer', income: 75000, creditScore: 720 },
+        { customerId: 'CUST002', name: 'Priya Sharma', phone: '919876543211', email: 'priya.sharma@example.com', age: 28, city: 'Delhi', country: 'India', occupation: 'Marketing Manager', income: 90000, creditScore: 780 },
+        { customerId: 'CUST003', name: 'Amit Patel', phone: '919876543212', email: 'amit.patel@example.com', age: 42, city: 'Bangalore', country: 'India', occupation: 'Business Owner', income: 120000, creditScore: 650 }
       ];
-      setUploadedFile({ name: 'sample-customers.csv', rowCount: 3, data: sampleData });
+      setUploadedFile({ 
+        name: 'sample-customers.csv', 
+        rowCount: 3, 
+        data: sampleData,
+        columns: Object.keys(sampleData[0])
+      });
     }
 
     if (demoStep === DemoStep.AUTO_PROMPT) {
@@ -130,8 +138,8 @@ const CreateCampaign: React.FC<CreateCampaignProps> = ({ onBack, isDemoMode = fa
         const data = JSON.parse(response.text || '{}');
         
         results.push({
-          customerId: customer.customer_id || customer.customerId || `CUST${i+1}`,
-          customerName: customer.name || customer.fullName || `Customer ${i+1}`,
+          customerId: customer.customerId || `CUST${i+1}`,
+          customerName: customer.name || `Customer ${i+1}`,
           rowNumber: i + 1,
           content: data.content,
           complianceScore: data.complianceScore,
@@ -154,9 +162,9 @@ const CreateCampaign: React.FC<CreateCampaignProps> = ({ onBack, isDemoMode = fa
 
   const handleDownloadSample = () => {
     const csvContent = "customerId,name,phone,email,age,city,country,occupation,income,creditScore\n" +
-      "CUST001,Rajesh Kumar,+919876543210,rajesh.kumar@example.com,35,Mumbai,India,Software Engineer,75000,720\n" +
-      "CUST002,Priya Sharma,+919876543211,priya.sharma@example.com,28,Delhi,India,Marketing Manager,90000,780\n" +
-      "CUST003,Amit Patel,+919876543212,amit.patel@example.com,42,Bangalore,India,Business Owner,120000,650";
+      "CUST001,Rajesh Kumar,919876543210,rajesh.kumar@example.com,35,Mumbai,India,Software Engineer,75000,720\n" +
+      "CUST002,Priya Sharma,919876543211,priya.sharma@example.com,28,Delhi,India,Marketing Manager,90000,780\n" +
+      "CUST003,Amit Patel,919876543212,amit.patel@example.com,42,Bangalore,India,Business Owner,120000,650";
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -174,8 +182,15 @@ const CreateCampaign: React.FC<CreateCampaignProps> = ({ onBack, isDemoMode = fa
       reader.onload = (event) => {
         const data = event.target?.result;
         const workbook = XLSX.read(data, { type: 'binary' });
-        const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]) as CustomerData[];
-        setUploadedFile({ name: file.name, rowCount: jsonData.length, data: jsonData });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(sheet) as CustomerData[];
+        const columns = jsonData.length > 0 ? Object.keys(jsonData[0]) : [];
+        setUploadedFile({ 
+          name: file.name, 
+          rowCount: jsonData.length, 
+          data: jsonData,
+          columns: columns
+        });
       };
       reader.readAsBinaryString(file);
     }
@@ -401,6 +416,9 @@ const CreateCampaign: React.FC<CreateCampaignProps> = ({ onBack, isDemoMode = fa
     );
   }
 
+  const allRequiredFound = uploadedFile && REQUIRED_COLUMNS.every(col => uploadedFile.columns.includes(col));
+  const additionalColumns = uploadedFile ? uploadedFile.columns.filter(col => !REQUIRED_COLUMNS.includes(col)) : [];
+
   return (
     <div className="max-w-[1440px] mx-auto px-10 py-12 animate-in fade-in duration-500">
       <div className="mb-10 flex justify-between items-start">
@@ -443,29 +461,103 @@ const CreateCampaign: React.FC<CreateCampaignProps> = ({ onBack, isDemoMode = fa
             </button>
           </div>
           
-          <p className="text-gray-500 mb-8 font-medium">Upload a CSV file with your customer data (max 10 rows). Required columns: customer_id, name, phone, email, age, location, occupation</p>
+          <p className="text-gray-500 mb-8 font-medium">Upload a CSV file with your customer data (max 10 rows). Required columns: customerId, name, phone, email, age, city, country, occupation</p>
 
-          <div 
-            onClick={() => !isDemoMode && fileInputRef.current?.click()}
-            className={`border-2 border-dashed border-gray-200 rounded-2xl p-16 text-center transition-all group ${uploadedFile ? 'bg-orange-50/30 border-orange-200' : 'hover:bg-gray-50 hover:border-[#F97316] cursor-pointer'}`}
-          >
-            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".csv,.xlsx,.xls" />
-            <div className="w-16 h-16 bg-[#FFF7ED] rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
-              <UploadIcon size={32} className="text-[#F97316]" />
-            </div>
-            {uploadedFile ? (
-              <div>
-                <p className="text-2xl font-bold text-[#0F172A] mb-1">{uploadedFile.name}</p>
-                <p className="text-gray-500 font-medium">{uploadedFile.rowCount} rows detected</p>
+          {!uploadedFile ? (
+            <div 
+              onClick={() => !isDemoMode && fileInputRef.current?.click()}
+              className="border-2 border-dashed border-gray-200 rounded-2xl p-16 text-center cursor-pointer hover:bg-gray-50 hover:border-[#F97316] transition-all group"
+            >
+              <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".csv,.xlsx,.xls" />
+              <div className="w-16 h-16 bg-[#FFF7ED] rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+                <UploadIcon size={32} className="text-[#F97316]" />
               </div>
-            ) : (
               <div>
                 <p className="text-2xl font-bold text-[#0F172A] mb-1">Drag & drop your CSV file here</p>
                 <p className="text-gray-500 font-medium">or click to browse</p>
                 <p className="text-[13px] text-gray-400 mt-6 uppercase tracking-widest font-bold">Supports CSV, XLS, XLSX (max 10 rows)</p>
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="space-y-10 animate-in fade-in zoom-in-95 duration-500">
+              {/* High Fidelity Preview Section */}
+              <div className="bg-[#F0FDF4]/40 border border-[#DCFCE7] p-8 rounded-2xl">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white">
+                    <Check size={20} strokeWidth={3} />
+                  </div>
+                  <h4 className="text-[28px] font-black text-[#0F172A] tracking-tight">CSV Preview - All Required Columns Found</h4>
+                </div>
+                <p className="text-[15px] text-[#64748B] font-bold ml-11">
+                  {uploadedFile.rowCount} rows loaded • {uploadedFile.columns.length} columns detected
+                </p>
+
+                <div className="mt-8">
+                  <h5 className="text-[15px] font-black text-[#0F172A] mb-4">Column Status:</h5>
+                  <div className="flex flex-wrap gap-2">
+                    {REQUIRED_COLUMNS.map(col => (
+                      <span key={col} className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#F97316] text-white rounded-full text-[13px] font-black shadow-sm">
+                         <div className="w-4 h-4 bg-white/20 rounded-full flex items-center justify-center">
+                            <Check size={10} strokeWidth={4} />
+                         </div>
+                         {col}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {additionalColumns.length > 0 && (
+                  <div className="mt-8">
+                    <h5 className="text-[15px] font-black text-[#0F172A] mb-4">Additional Columns:</h5>
+                    <div className="flex flex-wrap gap-2">
+                      {additionalColumns.map(col => (
+                        <span key={col} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-xl text-[13px] font-black border border-gray-200">
+                          {col}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-10">
+                  <h5 className="text-[15px] font-black text-[#0F172A] mb-4">Sample Data (First 3 rows):</h5>
+                  <div className="w-full overflow-x-auto rounded-xl border border-gray-200 shadow-sm bg-white">
+                    <table className="w-full text-left border-collapse">
+                      <thead className="bg-[#F8FAFC]">
+                        <tr>
+                          {uploadedFile.columns.map(col => (
+                            <th key={col} className="px-6 py-4 text-[13px] font-black text-[#64748B] whitespace-nowrap border-b border-gray-100 uppercase tracking-tight">
+                              {col}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {uploadedFile.data.slice(0, 3).map((row, i) => (
+                          <tr key={i} className="hover:bg-gray-50/50">
+                            {uploadedFile.columns.map(col => (
+                              <td key={col} className="px-6 py-4 text-[14px] font-bold text-gray-700 whitespace-nowrap">
+                                {String(row[col])}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex justify-end">
+                   <button 
+                     onClick={() => {setUploadedFile(null); if(fileInputRef.current) fileInputRef.current.value = "";}}
+                     className="text-gray-400 hover:text-red-500 font-black text-[13px] uppercase tracking-widest flex items-center gap-2"
+                   >
+                     <X size={14} /> Clear and Re-upload
+                   </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Step 2: Configure */}
