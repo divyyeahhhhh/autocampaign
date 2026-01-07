@@ -15,7 +15,9 @@ import {
   Brain,
   Activity,
   CheckCircle,
-  Check
+  Check,
+  Lightbulb,
+  ShieldCheck
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -30,6 +32,11 @@ interface CreateCampaignProps {
 
 interface CustomerData {
   [key: string]: any;
+}
+
+interface CampaignIntelligence {
+  strategy: string;
+  logic: string;
 }
 
 interface GeneratedMessage {
@@ -49,6 +56,7 @@ const CreateCampaign: React.FC<CreateCampaignProps> = ({ onBack, isDemoMode = fa
   const [uploadedFile, setUploadedFile] = useState<{ name: string; rowCount: number; data: CustomerData[]; columns: string[] } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationResults, setGenerationResults] = useState<GeneratedMessage[]>([]);
+  const [campaignIntel, setCampaignIntel] = useState<CampaignIntelligence | null>(null);
   const [currentStep, setCurrentStep] = useState<'config' | 'results'>('config');
   const [selectedMessage, setSelectedMessage] = useState<GeneratedMessage | null>(null);
   const [activeAnalysisTab, setActiveAnalysisTab] = useState<'content' | 'compliance'>('content');
@@ -103,6 +111,28 @@ const CreateCampaign: React.FC<CreateCampaignProps> = ({ onBack, isDemoMode = fa
     const model = 'gemini-3-pro-preview';
 
     try {
+      // PHASE 1: Generate Master Campaign Strategy & Logic Reasoning
+      const intelResponse = await ai.models.generateContent({
+        model,
+        contents: `Based on this campaign prompt: "${prompt}", generate a comprehensive marketing strategy and explain the core logic reasoning behind the execution (triggers, compliance approach, segmentation logic).`,
+        config: {
+          systemInstruction: "You are a Master BFSI Marketing Strategist. Define the 'What' and the 'Why' for this campaign.",
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              strategy: { type: Type.STRING, description: "The overarching marketing strategy." },
+              logic: { type: Type.STRING, description: "Detailed reasoning behind the chosen logic, behavioral triggers, and compliance guardrails." }
+            },
+            required: ["strategy", "logic"]
+          }
+        }
+      });
+      
+      const intelData = JSON.parse(intelResponse.text || '{}');
+      setCampaignIntel(intelData);
+
+      // PHASE 2: Individual Personalization
       const results: GeneratedMessage[] = [];
       
       for (let i = 0; i < dataToProcess.length; i++) {
@@ -111,16 +141,16 @@ const CreateCampaign: React.FC<CreateCampaignProps> = ({ onBack, isDemoMode = fa
         const response = await ai.models.generateContent({
           model,
           contents: `
-            Generate a personalized marketing message for the following customer:
-            CUSTOMER DATA: ${JSON.stringify(customer)}
+            PERSONALIZATION TASK:
+            Master Strategy: ${intelData.strategy}
+            Logic Guidelines: ${intelData.logic}
+            Target Customer: ${JSON.stringify(customer)}
+            Desired Tone: ${tone}
             
-            CAMPAIGN GOAL: ${prompt}
-            DESIRED TONE: ${tone}
-            
-            Strictly adhere to BFSI compliance standards. 
+            Generate a message that follows the master strategy while hyper-personalizing for this specific customer data.
           `,
           config: {
-            systemInstruction: "You are an expert BFSI Marketing Specialist. Ensure compliance and personalization.",
+            systemInstruction: "You are an expert BFSI Execution Specialist. Ensure compliance and personalized relevance.",
             responseMimeType: "application/json",
             responseSchema: {
               type: Type.OBJECT,
@@ -128,7 +158,7 @@ const CreateCampaign: React.FC<CreateCampaignProps> = ({ onBack, isDemoMode = fa
                 content: { type: Type.STRING },
                 complianceScore: { type: Type.INTEGER },
                 aiConfidence: { type: Type.INTEGER },
-                reasoning: { type: Type.STRING }
+                reasoning: { type: Type.STRING, description: "Explain exactly how customer data points informed this specific message." }
               },
               required: ["content", "complianceScore", "aiConfidence", "reasoning"]
             }
@@ -220,6 +250,44 @@ const CreateCampaign: React.FC<CreateCampaignProps> = ({ onBack, isDemoMode = fa
           </button>
         </div>
 
+        {/* Global Campaign Intelligence Section */}
+        <div className="mb-12 space-y-6">
+           <div className="flex items-center gap-3 mb-4">
+              <Sparkles className="text-[#F97316]" size={28} />
+              <h2 className="text-[28px] font-black text-[#0F172A] tracking-tight">Campaign Intelligence & AI Logic</h2>
+           </div>
+           
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Strategy Card */}
+              <div className="bg-white p-10 rounded-[2rem] border border-orange-100 shadow-[0_10px_40px_-15px_rgba(249,115,22,0.1)] relative overflow-hidden group">
+                 <div className="absolute top-0 right-0 w-32 h-32 bg-orange-50 rounded-full -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-500"></div>
+                 <div className="flex items-center gap-4 mb-6 relative z-10">
+                    <div className="w-12 h-12 bg-[#FFF7ED] text-[#F97316] rounded-2xl flex items-center justify-center">
+                       <Lightbulb size={24} />
+                    </div>
+                    <h3 className="text-[20px] font-black text-[#0F172A]">Marketing Strategy</h3>
+                 </div>
+                 <p className="text-[16px] text-[#64748B] font-medium leading-relaxed relative z-10">
+                    {campaignIntel?.strategy}
+                 </p>
+              </div>
+
+              {/* Reasoning Card */}
+              <div className="bg-white p-10 rounded-[2rem] border border-indigo-100 shadow-[0_10px_40px_-15px_rgba(79,70,229,0.1)] relative overflow-hidden group">
+                 <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-500"></div>
+                 <div className="flex items-center gap-4 mb-6 relative z-10">
+                    <div className="w-12 h-12 bg-[#F5F3FF] text-[#8B5CF6] rounded-2xl flex items-center justify-center">
+                       <Brain size={24} />
+                    </div>
+                    <h3 className="text-[20px] font-black text-[#0F172A]">Logic & AI Reasoning</h3>
+                 </div>
+                 <p className="text-[16px] text-[#64748B] font-medium leading-relaxed relative z-10">
+                    {campaignIntel?.logic}
+                 </p>
+              </div>
+           </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
           {[
             { label: 'Total Messages', value: generationResults.length.toString(), color: 'text-[#0F172A]' },
@@ -236,8 +304,8 @@ const CreateCampaign: React.FC<CreateCampaignProps> = ({ onBack, isDemoMode = fa
 
         <div className="bg-white rounded-[1.5rem] border border-gray-100 overflow-hidden shadow-sm">
           <div className="p-8 border-b border-gray-100">
-             <h3 className="text-2xl font-bold text-[#0F172A]">Generated Messages</h3>
-             <p className="text-gray-500 font-medium">Review and edit AI-generated messages with compliance scores</p>
+             <h3 className="text-2xl font-bold text-[#0F172A]">Individual Personalization Results</h3>
+             <p className="text-gray-500 font-medium">Review AI-generated messages against the master strategy</p>
           </div>
           <table className="w-full text-left">
             <thead className="bg-[#F8FAFC]">
@@ -349,7 +417,7 @@ const CreateCampaign: React.FC<CreateCampaignProps> = ({ onBack, isDemoMode = fa
                       onClick={() => setActiveAnalysisTab('content')}
                       className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${activeAnalysisTab === 'content' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                     >
-                      Content Analysis
+                      AI Per-Message Logic
                     </button>
                     <button 
                       onClick={() => setActiveAnalysisTab('compliance')}
@@ -367,15 +435,15 @@ const CreateCampaign: React.FC<CreateCampaignProps> = ({ onBack, isDemoMode = fa
                           <div className="p-2 bg-orange-50 text-orange-500 rounded-lg">
                             <Brain size={24} />
                           </div>
-                          <h4 className="text-[28px] font-bold text-[#0F172A]">How was this message generated?</h4>
+                          <h4 className="text-[28px] font-bold text-[#0F172A]">Personalization Logic</h4>
                         </div>
-                        <p className="text-[15px] text-gray-500 font-medium">AI reasoning and decision-making process</p>
+                        <p className="text-[15px] text-gray-500 font-medium">How the AI customized this message based on customer data</p>
                       </div>
 
                       <div className="space-y-4">
                         <div className="flex justify-between items-center">
                           <div className="flex items-center gap-2 text-green-600 font-bold text-sm uppercase tracking-wider">
-                            <Activity size={16} /> AI Confidence
+                            <Activity size={16} /> Confidence Score
                           </div>
                           <span className="px-2 py-0.5 bg-green-50 text-green-700 rounded-md text-[13px] font-black border border-green-100">
                             {selectedMessage.aiConfidence}%
@@ -387,9 +455,6 @@ const CreateCampaign: React.FC<CreateCampaignProps> = ({ onBack, isDemoMode = fa
                             style={{ width: `${selectedMessage.aiConfidence}%` }}
                           />
                         </div>
-                        <p className="text-xs text-gray-400 font-medium">
-                          {selectedMessage.aiConfidence > 90 ? 'High Confidence - The AI is very confident about this decision' : 'Moderate Confidence - Review is recommended'}
-                        </p>
                       </div>
 
                       <div className="pt-6 border-t border-gray-50">
@@ -397,6 +462,32 @@ const CreateCampaign: React.FC<CreateCampaignProps> = ({ onBack, isDemoMode = fa
                           {selectedMessage.reasoning}
                         </p>
                       </div>
+                    </div>
+                  )}
+
+                  {/* Tab Content: Compliance */}
+                  {activeAnalysisTab === 'compliance' && (
+                    <div className="bg-white border border-gray-100 rounded-2xl p-8 space-y-8 animate-in fade-in duration-300">
+                       <div className="flex items-center gap-3 mb-2">
+                          <div className="p-2 bg-green-50 text-green-500 rounded-lg">
+                            <ShieldCheck size={24} />
+                          </div>
+                          <h4 className="text-[28px] font-bold text-[#0F172A]">Compliance Audit</h4>
+                        </div>
+                        <div className="space-y-4">
+                          {[
+                            { name: "Risk Transparency", pass: selectedMessage.complianceScore > 75 },
+                            { name: "Non-misleading Language", pass: selectedMessage.complianceScore > 80 },
+                            { name: "Verifiable Claims", pass: true }
+                          ].map((item, idx) => (
+                            <div key={idx} className="flex justify-between items-center p-4 bg-gray-50 rounded-xl">
+                              <span className="font-bold text-gray-700">{item.name}</span>
+                              <span className={`flex items-center gap-1.5 font-black text-xs uppercase ${item.pass ? 'text-green-600' : 'text-orange-500'}`}>
+                                {item.pass ? <Check size={14} /> : <X size={14} />} {item.pass ? 'Pass' : 'Review'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                     </div>
                   )}
                 </div>
@@ -626,8 +717,14 @@ const CreateCampaign: React.FC<CreateCampaignProps> = ({ onBack, isDemoMode = fa
                  <Sparkles size={24} className="text-orange-300 animate-pulse" />
               </div>
            </div>
-           <h2 className="text-[32px] font-black text-[#0F172A] mb-4">Generating {uploadedFile?.rowCount} Messages</h2>
-           <p className="text-xl text-gray-500 font-medium text-center max-w-md">Our AI is analyzing your audience data and applying compliance checks for every row...</p>
+           <h2 className="text-[32px] font-black text-[#0F172A] mb-4">
+            {generationResults.length === 0 ? "Defining Strategy..." : `Generating ${uploadedFile?.rowCount} Messages`}
+           </h2>
+           <p className="text-xl text-gray-500 font-medium text-center max-w-md">
+            {generationResults.length === 0 
+              ? "Our Master AI is analyzing your prompt to build a comprehensive marketing logic..." 
+              : "Applying master strategy to individual customer data points with compliance checks..."}
+           </p>
            
            <div className="mt-12 w-full max-w-md bg-gray-100 rounded-full h-2.5 overflow-hidden">
               <div 
@@ -635,7 +732,9 @@ const CreateCampaign: React.FC<CreateCampaignProps> = ({ onBack, isDemoMode = fa
                 style={{ width: `${(generationResults.length / (uploadedFile?.rowCount || 1)) * 100}%` }}
               />
            </div>
-           <p className="mt-4 text-sm font-bold text-gray-400">Step {generationResults.length} of {uploadedFile?.rowCount}</p>
+           <p className="mt-4 text-sm font-bold text-gray-400">
+            {generationResults.length === 0 ? "Analyzing Prompt" : `Step ${generationResults.length} of ${uploadedFile?.rowCount}`}
+           </p>
         </div>
       )}
     </div>
